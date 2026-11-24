@@ -46,40 +46,60 @@ def silences(wav):
 
 
 def segment(texts, wav):
-    """Return [(start,end)] per text, cutting at the silence nearest each char-proportional target."""
+    """Return [(start,end)] per text. Chooses len(texts)-1 pauses so each sentence's duration best
+    matches its character count at the voice's average speaking rate (dynamic programming), with a
+    small bonus for longer pauses (sentence ends pause longer than commas)."""
     T = duration(wav)
     sil = silences(wav)
     lead = sil[0][1] if sil and sil[0][0] < 0.05 else 0.0
     tail = sil[-1][0] if sil and sil[-1][1] > T - 0.05 else T
     gaps = [(s, e) for s, e in sil if s > lead + 0.2 and e < tail - 0.2]
     n = len(texts)
-    w = [max(len(t), 1) for t in texts]
-    cum, tot = [], sum(w)
-    acc = 0
-    for x in w[:-1]:
-        acc += x
-        cum.append(lead + (tail - lead) * acc / tot)
-    cuts, used, last = [], set(), lead
-    for k, tgt in enumerate(cum):
-        cands = [(abs((s + e) / 2 - tgt), i) for i, (s, e) in enumerate(gaps)
-                 if i not in used and (s + e) / 2 > last + 0.4]
-        # leave enough gaps for the remaining cuts
-        remaining = len(cum) - k - 1
-        cands = [c for c in cands if sum(1 for j in range(c[1] + 1, len(gaps))) >= remaining] or cands
-        if cands and min(cands)[0] < 2.5:
-            _, i = min(cands)
-            used.add(i)
-            s, e = gaps[i]
-            cuts.append((s, e))
-            last = (s + e) / 2
-        else:
-            cuts.append((tgt, tgt))
-            last = tgt
-    spans, start = [], lead
-    for s, e in cuts:
-        spans.append((start, s))
-        start = e
-    spans.append((start, tail))
+    ch = [max(len(t), 1) for t in texts]
+    speech = (tail - lead) - sum(e - s for s, e in gaps)
+    r = speech / sum(ch)
+    G = len(gaps)
+    if G < n - 1:
+        # not enough pauses: fall back to proportional cuts
+        cuts, acc = [], 0
+        for x in ch[:-1]:
+            acc += x
+            t = lead + (tail - lead) * acc / sum(ch)
+            cuts.append((t, t))
+        gaps, G = cuts, len(cuts)
+    INF = float("inf")
+    # point j: 0 = lead, 1..G = gaps, G+1 = tail
+    st = [lead] + [g[0] for g in gaps] + [tail]   # where speech before this point ends
+    en = [lead] + [g[1] for g in gaps] + [tail]   # where speech after this point starts
+    glen = [0] + [g[1] - g[0] for g in gaps] + [0]
+    inner = lambda a, b: sum(glen[a + 1:b])       # pauses inside a sentence
+
+    def cost(k, a, b):
+        d = st[b] - en[a] - inner(a, b)
+        exp = ch[k] * r
+        return (d - exp) ** 2 / max(exp, 0.5) - (0.4 * glen[b] if b <= G else 0)
+
+    dp = [[INF] * (G + 2) for _ in range(n + 1)]
+    bk = [[-1] * (G + 2) for _ in range(n + 1)]
+    dp[0][0] = 0
+    for k in range(n):
+        lo, hi = k + 1, (G + 1 if k == n - 1 else G)
+        for b in range(lo, hi + 1):
+            if k == n - 1 and b != G + 1:
+                continue
+            for a in range(k, b):
+                if dp[k][a] == INF:
+                    continue
+                c = dp[k][a] + cost(k, a, b)
+                if c < dp[k + 1][b]:
+                    dp[k + 1][b], bk[k + 1][b] = c, a
+    pts, b = [], G + 1
+    for k in range(n, 0, -1):
+        pts.append(b)
+        b = bk[k][b]
+    pts.append(0)
+    pts = pts[::-1]
+    spans = [(en[pts[i]], st[pts[i + 1]]) for i in range(n)]
     return spans, T
 
 
