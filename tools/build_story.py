@@ -172,11 +172,11 @@ def frase_png(text, path):
     return (W - bw) // 2, 1420 - bh // 2
 
 
-def pill_png(path):
+def pill_png(path, text="Suscríbete", color=(255, 0, 0, 255)):
     pw, ph = 384, 96
     im = Image.new("RGBA", (pw, ph + 60), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
-    d.rounded_rectangle((0, 0, pw - 1, ph - 1), radius=ph // 2, fill=(255, 0, 0, 255))
+    d.rounded_rectangle((0, 0, pw - 1, ph - 1), radius=ph // 2, fill=color)
     # bell
     cx, cy = 56, 46
     d.pieslice((cx - 24, cy - 30, cx + 24, cy + 18), 180, 360, fill="white")
@@ -184,7 +184,7 @@ def pill_png(path):
     d.polygon([(cx - 32, cy + 22), (cx + 32, cy + 22), (cx + 24, cy + 12), (cx - 24, cy + 12)], fill="white")
     d.ellipse((cx - 8, cy + 22, cx + 8, cy + 34), fill="white")
     f = font(BOLD, 44)
-    d.text((98, 22), "Suscríbete", font=f, fill="white")
+    d.text((98, 22), text, font=f, fill="white")
     # arrow
     ax = 192
     d.polygon([(ax - 18, ph + 18), (ax + 18, ph + 18), (ax, ph + 40)], fill="white")
@@ -245,7 +245,7 @@ def main():
         ov.append((p, 0, str(y), max(0, s - 0.05), e2 - 0.02))
     fx, fy = frase_png(job["frase"], os.path.join(tmpd, "frase.png"))
     ov.append((os.path.join(tmpd, "frase.png"), fx, str(fy), spans[nn][0] - 0.05, T))
-    px, py = pill_png(os.path.join(tmpd, "pill.png"))
+    px, py = pill_png(os.path.join(tmpd, "pill.png"), job.get("pill", "Suscríbete"), tuple(job.get("pill_color", [255, 0, 0, 255])))
     ov.append((os.path.join(tmpd, "pill.png"), px, f"{py}+6*sin(2*PI*1.3*t)", T - 3.0, T))
 
     args = ["-i", bg]
